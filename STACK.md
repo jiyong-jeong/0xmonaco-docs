@@ -1,52 +1,52 @@
-# Stack
+# 스택
 
-## Language & toolchain
+## 언어 & 툴체인
 
-- **Solidity** 0.8.13 — pinned at the version the game contract uses, so the bot compiles with identical overflow/check semantics
-- **Foundry** for build, test, gas profiling — `forge test`, `forge snapshot`
-- **Solmate** for utility libraries (`SafeCastLib` for narrowing casts without panicking)
+- **Solidity** 0.8.13 — 게임 컨트랙트가 쓰는 버전과 동일하게 핀. overflow/check 시맨틱이 완전히 같도록 보장하기 위함
+- **Foundry** — 빌드, 테스트, 가스 프로파일링. `forge test`, `forge snapshot`
+- **Solmate** — 유틸 라이브러리 (`SafeCastLib` 로 panic 없이 narrowing cast)
 
-## Math
+## 수학
 
-- **SignedWadMath** — fixed-point arithmetic at 18 decimals (`wadMul`, `wadDiv`, `wadExp`, `wadLn`). Required because the pricing formula uses continuous exponential decay; integer math would diverge after a few turns.
+- **SignedWadMath** — 18자리 고정소수점 산술 (`wadMul`, `wadDiv`, `wadExp`, `wadLn`). 가격 수식이 연속 지수 감쇠를 쓰기 때문에 필수. 정수 산술로는 몇 턴만 지나도 발산한다.
 
-## Code layout (canonical)
+## 코드 레이아웃 (정본)
 
 ```
 src/
-├── Monaco.sol             — game contract (the "spec")
-├── utils/SignedWadMath.sol — fixed-point helpers
+├── Monaco.sol             — 게임 컨트랙트 ("스펙")
+├── utils/SignedWadMath.sol — 고정소수점 헬퍼
 └── cars/
-    ├── Car.sol            — abstract base; defines takeYourTurn interface
-    └── ExampleCar.sol     — reference implementation, useful as opponent
+    ├── Car.sol            — 추상 베이스. takeYourTurn 인터페이스 정의
+    └── ExampleCar.sol     — 레퍼런스 구현. 상대로 두기에도 유용
 
 script/
-└── Deploy*.s.sol          — Foundry deploy script
+└── Deploy*.s.sol          — Foundry 배포 스크립트
 
 test/
-└── Monaco.t.sol           — Foundry tests; also doubles as a poor-man's simulator
+└── Monaco.t.sol           — Foundry 테스트. 가난한 자의 시뮬레이터 역할도 겸함
 ```
 
-## Foundry configuration
+## Foundry 설정
 
-Key bits worth keeping:
+들고 갈 만한 핵심 부분:
 
 ```toml
 [profile.default]
-bytecode_hash = "none"      # deterministic bytecode (matters when judging)
-optimizer_runs = 1000000    # max optimization; deploy gas matters less than runtime gas
-solc = "0.8.13"             # pinned
+bytecode_hash = "none"      # 결정적 bytecode (채점 환경에서 의미 있음)
+optimizer_runs = 1000000    # 최대 최적화. 배포 가스보다 런타임 가스가 중요
+solc = "0.8.13"             # 핀
 
 [profile.intense]
-fuzz_runs = 10000           # for property-based testing edge cases
+fuzz_runs = 10000           # 엣지 케이스용 property-based 테스트
 ```
 
-## Why this stack for this problem
+## 이 스택을 고른 이유
 
-- **Foundry over Hardhat:** test loop is 10–100× faster, which matters because every bot iteration involves replaying many simulated games
-- **Solmate over OpenZeppelin:** Solmate's libs (especially the fixed-point math) are smaller, gas-leaner, and the wad-math primitive isn't available in OZ
-- **No frontend, no off-chain orchestration in the contract repo:** the simulator is a separate project (recommend Python or TypeScript) that *mirrors* the Solidity rules — keeping the on-chain spec dumb and the off-chain optimizer rich
+- **Foundry vs Hardhat:** 테스트 루프가 10~100배 빠름. 봇 한 번 고칠 때마다 시뮬레이션 게임을 여러 번 돌려야 하므로 중요.
+- **Solmate vs OpenZeppelin:** Solmate 쪽 라이브러리가 더 작고 가스 효율적. 특히 fixed-point math primitive 는 OZ 에 없다.
+- **컨트랙트 repo 안에 프론트엔드/오프체인 오케스트레이션을 두지 않음:** 시뮬레이터는 별도 프로젝트(Python 또는 TypeScript 권장)로 두고, Solidity 룰을 *미러링* 한다. 온체인 스펙은 단순하게, 오프체인 최적화는 풍부하게 — 분리를 지킨다.
 
-## Deployment notes
+## 배포 노트
 
-For the CTF itself the organizer deploys the game contract and registers each player's car. For local self-play, the included deploy script wires up three cars against one Monaco instance. The bot doesn't need any off-chain infrastructure at runtime — it's pure on-chain reaction.
+CTF 본 게임에서는 주최자가 게임 컨트랙트를 배포하고 각 플레이어 car 를 등록한다. 로컬 self-play 의 경우 동봉된 배포 스크립트가 하나의 Monaco 인스턴스 + 세 대의 car 를 연결해 준다. 봇은 런타임에 오프체인 인프라가 전혀 필요 없다 — 순수 온체인 reactive 다.

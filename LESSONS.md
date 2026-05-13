@@ -1,46 +1,46 @@
-# Lessons
+# 배운 점
 
-## What surprised me
+## 의외였던 것
 
-### Pricing math is the easy part — opponent modeling is the hard part
-The continuous-decay pricing schedule is fully deterministic and the contract exposes helpers (`getAccelerateCost`, `getShellCost`). You can compute exactly what every action costs. What you can't compute: what your two opponents will do in the same turn. Spending compute on opponent heuristics paid off more than spending it on cost optimization.
+### 가격 수식은 쉬운 쪽 — 어려운 건 상대 모델링
+연속 감쇠 가격 스케줄은 완전히 결정적이고, 컨트랙트가 헬퍼(`getAccelerateCost`, `getShellCost`)까지 노출한다. 모든 액션의 비용을 정확히 계산할 수 있다. 계산할 수 없는 것: 같은 턴에 두 상대가 뭘 할지. **비용 최적화에 컴퓨트를 쓰는 것보다 상대 휴리스틱에 쓰는 게 훨씬 더 보상이 컸다.**
 
-### A naive "always accelerate when cheap" loses
-It feels like the right move: prices oscillate, buy at the trough. But the same trough is visible to everyone, so all three cars buy simultaneously, the surge eats your savings, and the leader who *didn't* buy now has a runway. **Cheap doesn't mean affordable — it means crowded.**
+### 단순 "쌀 때 항상 가속" 전략은 진다
+직관적으로 맞아 보인다: 가격이 출렁이니 저점에서 사면 된다. 하지만 같은 저점이 모두에게 보이므로, 세 대가 동시에 사면 surge 가 절약분을 다 먹어버린다. 그리고 *안 사고* 있던 선두는 그 사이 런웨이가 길어진다. **싸다고 곧 살 만한 게 아니라, 싸다는 건 붐빈다는 뜻이다.**
 
-### Shells are weaker than they look
-A shell drops one car to speed 1 for one turn. That car then accelerates next turn and is back. Meanwhile you spent the shell-price *and* the opponent ahead of you (if you didn't shell them) gained a turn. Shells are only powerful very late game, when the target has no balance left to recover.
+### shell 은 보기보다 약하다
+shell 은 한 차를 한 턴 speed 1 로 만든다. 그 차는 바로 다음 턴에 가속을 사서 돌아온다. 그동안 나는 shell 가격을 쓴 데다 (셸을 안 박은 다른 앞 차가 있다면) 그 차는 한 턴을 벌었다. shell 은 **상대가 회복할 balance 가 더는 없는 매우 후반**에만 강력하다.
 
-### Speed compounds, balance doesn't
-A speed-10 car that has 1000 balance left will out-finish a speed-2 car with 5000 balance, every time. Once you have a clear lead, **don't conserve money — convert it to speed before the opponents can shell you out of it.**
+### speed 는 복리, balance 는 아님
+speed 10 에 balance 가 1000 남은 차가, speed 2 에 balance 5000 인 차를 매번 이긴다. 명확한 선두가 되면 **돈을 아끼지 말고, 상대가 shell 로 깎아낼 수 있기 전에 속도로 전환해라.**
 
-## What was tricky
+## 까다로웠던 것
 
-### Fixed-point traps
-Multiplying two 18-decimal wads gives a 36-decimal number; you have to divide back by 1e18 (or use `wadMul`). Forgetting this once silently misprices the entire decision. The helper library's `wadExp` saturates rather than throwing — that's a footgun if you don't expect it.
+### Fixed-point 함정
+18자리 wad 두 개를 곱하면 36자리가 된다. 다시 1e18 로 나눠야 한다 (또는 `wadMul` 사용). 한 번 빠뜨리면 결정 전체의 가격이 조용히 어긋난다. 헬퍼의 `wadExp` 는 throw 대신 saturate 한다 — 예상 못 하면 footgun.
 
-### `takeYourTurn` runs in a `try/catch` on the host side
-If your car reverts (out-of-gas, division by zero, asserting an invariant), you're *punished* — your turn is forfeit and you may lose balance. The bot has to be defensive: every external view call should be bounded, every arithmetic op should account for overflow at the wad-math boundary.
+### `takeYourTurn` 은 호스트 측 `try/catch` 안에서 돈다
+car 가 revert 하면 (out-of-gas, division by zero, assert 실패), **벌점**이 붙는다 — 그 턴은 forfeit 되고 balance 가 깎일 수 있다. 봇은 방어적으로 짜야 한다: 모든 외부 view 호출은 bound 되어야 하고, 모든 산술은 wad-math 경계에서 오버플로를 의식해야 한다.
 
-### Gas is a hard cap on cleverness
-Each turn has a per-call gas budget. A 200-loop simulation of opponent moves over the remaining race won't fit. You have to do "shallow reasoning per turn, called many times" — Monte-Carlo-lite, not deep tree search.
+### 가스가 영리함의 하드 캡
+턴마다 호출당 가스 예산이 정해져 있다. 남은 race 동안의 상대 행동을 200번 시뮬레이션 하는 건 안 들어간다. **얕은 추론을 매 턴 반복해야** 한다 — Monte-Carlo lite, 깊은 트리 탐색이 아니다.
 
-## What I'd do differently
+## 다시 한다면
 
-### Build a proper off-chain simulator first
-The contract is the spec; a faithful Solidity-mirror in Python/TypeScript lets you self-play tens of thousands of races overnight against different opponent archetypes. I tried to iterate on the bot directly in Foundry tests and it was painfully slow.
+### 제대로 된 오프체인 시뮬레이터를 먼저 만들 것
+컨트랙트가 곧 스펙이다. 이 스펙을 Python/TypeScript 로 충실히 옮긴 미러를 만들면, 다른 상대 archetype 들을 상대로 하룻밤에 수만 게임을 self-play 할 수 있다. 처음에 Foundry 테스트 안에서 봇을 직접 다듬으려 했는데, 너무 느려서 고통스러웠다.
 
-### Encode the strategy as a small table, not a long if-else
-Branching logic on `(my_position_rank, gap_to_lead, balance_ratio, turns_remaining)` quickly turns into spaghetti. A bucketed lookup table (turn-into-race × position-rank → action policy) is easier to tune and easier to debug against simulator output.
+### 전략은 긴 if-else 가 아니라 작은 테이블로
+`(my_position_rank, gap_to_lead, balance_ratio, turns_remaining)` 같은 변수들의 분기 로직은 금방 스파게티가 된다. 버킷된 lookup 테이블 (레이스 진행도 × 순위 → 액션 정책) 이 튜닝하기도, 시뮬레이터 출력에 대해 디버그하기도 훨씬 쉽다.
 
-### Don't pre-commit to a shell budget
-I split the initial 15k balance into "acceleration budget" and "shell budget" in early versions. Bad idea. Shells should be **opportunistic**, triggered by opponent state, not budgeted. Treating the whole balance as fungible and asking "what's the best action right now?" beat any pre-allocated scheme.
+### shell 예산을 미리 고정하지 말 것
+초반 버전에서는 15k 시작 balance 를 "가속 예산"과 "shell 예산"으로 쪼개 두었다. 나쁜 아이디어였다. shell 은 예산이 아니라 **상대 상태에 의해 트리거되는 opportunistic** 자원이다. 전체 balance 를 그냥 fungible 하게 두고 매 턴 "지금 최선의 액션은?"만 묻는 쪽이 어떤 사전 분할 안보다도 잘 됐다.
 
-## Generalizable takeaways
+## 일반화 가능한 교훈
 
-If you're building on-chain agents for any auction-style market:
+경매 스타일 마켓을 다루는 온체인 에이전트를 만들고 있다면:
 
-1. **The price formula is public, so price discovery isn't the moat.** The moat is *timing relative to other agents*.
-2. **Resource conservation is overrated.** Most agents lose by hoarding, not by spending. If you have a lead, lock it in.
-3. **Defensive code matters more than clever code.** A merely-okay bot that never reverts beats a brilliant one that occasionally OOGs.
-4. **Self-play in a faithful off-chain mirror is the only way to iterate fast.** On-chain tests are too slow and have too few sample points.
+1. **가격 수식은 공개되어 있으므로, 가격 탐색 자체는 해자가 아니다.** 해자는 *다른 에이전트들 대비 타이밍*이다.
+2. **자원 보존은 과대평가되어 있다.** 대부분의 에이전트는 너무 써서 지는 게 아니라 너무 쥐고 있어서 진다. 우위가 있다면 굳혀라.
+3. **방어적 코드가 영리한 코드보다 중요하다.** 절대로 revert 안 하는 그저 그런 봇이, 가끔 OOG 나는 천재 봇을 이긴다.
+4. **충실한 오프체인 미러에서 self-play 하는 것이 빨리 반복하는 유일한 길이다.** 온체인 테스트는 너무 느리고 샘플이 너무 적다.

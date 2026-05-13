@@ -1,25 +1,24 @@
-# On-Chain Racing Bot — Technical Notes
+# 온체인 레이싱 봇 — 기술 노트
 
-> Anonymized technical notes from a Paradigm CTF 2022 entry (0xMonaco). The challenge itself is public; these notes focus on the **strategy + engineering lessons** of building an AI bot for an on-chain auction-based racing game.
+> Paradigm CTF 2022 (0xMonaco) 출품작의 기술 노트를 익명화/일반화한 문서. 챌린지 자체는 공개되어 있으며, 이 문서는 **경매 기반 온체인 레이싱 게임에서 동작하는 AI 봇을 만드는 과정에서 얻은 전략과 엔지니어링 교훈**에 초점을 둔다.
 
-**Category:** AI strategy bot for an on-chain racing game with dynamic pricing auctions
-**Stack:** Solidity 0.8.13, Foundry, Solmate, fixed-point math (SignedWadMath)
-**What's interesting:**
-- Two-sided market (`ACCELERATE` vs `SHELL` actions) priced by **VRGDA**-style continuous decay → the bot has to time purchases against curves it can compute on-chain
-- All bot logic lives in a `takeYourTurn(carsState[], myIndex)` function — pure state-machine reasoning, no persistent storage
-- Adversarial: two other opponent bots in every round → opponent modeling matters more than raw math
+**카테고리:** 동적 가격 경매가 결합된 온체인 레이싱 게임용 AI 전략 봇
+**스택:** Solidity 0.8.13, Foundry, Solmate, fixed-point math (SignedWadMath)
+**눈여겨볼 지점:**
+- 양방향 시장 (`ACCELERATE` vs `SHELL`) 이 **VRGDA** 스타일의 연속 시간 감쇠 곡선으로 가격이 매겨짐 → 봇은 온체인에서 계산 가능한 곡선을 상대로 매수 타이밍을 잡아야 한다
+- 봇 로직 전체가 `takeYourTurn(carsState[], myIndex)` 한 함수 안에 들어감 — 영구 저장소 없이, 매 턴 순수 상태 머신처럼 추론
+- 적대적 환경: 매 게임 두 명의 다른 봇이 동시에 있음 → 단순 수식 풀이보다 **상대 모델링이 더 중요**
 
-## Contents
+## 목차
 
-- [Architecture](./ARCHITECTURE.md) — Game lifecycle, action pricing, bot decision flow
-- [Lessons](./LESSONS.md) — What surprised, what was tricky, what to do differently
-- [Stack](./STACK.md) — Toolchain, libraries, conventions
+- [아키텍처](./ARCHITECTURE.md) — 게임 라이프사이클, 액션 가격, 봇 의사결정 흐름
+- [배운 점](./LESSONS.md) — 의외였던 것, 까다로웠던 것, 다시 한다면 어떻게 할지
+- [스택](./STACK.md) — 툴체인, 라이브러리, 컨벤션
 
-## Why this is worth reading
+## 이 문서를 읽으면 좋은 사람
 
-If you're building an on-chain agent that has to:
-- Reason about **continuous-price auctions** (`x*` token sales, NFT mints with VRGDA, gas-limited resource markets)
-- Decide actions per-turn under a **gas budget** and a fixed-state contract API
-- Compete against other agents whose behavior you can only infer from on-chain telemetry
+다음 조건의 온체인 에이전트를 만들고 있다면 패턴이 그대로 옮겨붙는다:
 
-…the patterns here generalize.
+- **연속 가격 경매**를 추론해야 하는 경우 (`x*` 토큰 세일, VRGDA로 가격이 매겨지는 NFT mint, 가스 제한 리소스 마켓 등)
+- **가스 예산**과 **고정된 컨트랙트 API** 안에서 매 턴 액션을 결정해야 하는 경우
+- 온체인 텔레메트리로만 행동을 추론할 수 있는 **다른 에이전트들과 경쟁**해야 하는 경우

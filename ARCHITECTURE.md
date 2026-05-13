@@ -1,20 +1,20 @@
-# Architecture
+# 아키텍처
 
-## High-level shape
+## 큰 그림
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                  Monaco (game contract)                │
+│                  Monaco (게임 컨트랙트)                  │
 │                                                        │
-│  state:                                                │
+│  상태:                                                  │
 │    cars[3] = (balance, speed, position, contractAddr)  │
-│    turn counter, last-purchased prices                 │
+│    turn 카운터, 최근 매수 가격                            │
 │                                                        │
-│  actions (callable by the active car):                 │
-│    buyAcceleration(n)   →  +n speed for caller         │
-│    buyShell(n)          →  set next car's speed to 1   │
+│  액션 (현재 차례 car 만 호출 가능):                       │
+│    buyAcceleration(n)   →  caller 의 speed +n          │
+│    buyShell(n)          →  바로 앞 car 의 speed 를 1로  │
 │                                                        │
-│  per-turn loop:                                        │
+│  매 턴 루프:                                            │
 │    for car in cars:                                    │
 │        car.takeYourTurn(carsView, myIndex)             │
 │        car.position += car.speed                       │
@@ -23,63 +23,63 @@
               ▲                          ▲
               │                          │
        ┌──────┴──────┐            ┌──────┴──────┐
-       │  Bot car A  │            │  Bot car B  │   (player contracts)
+       │  Bot car A  │            │  Bot car B  │   (플레이어 컨트랙트)
        │ takeYourTurn│            │ takeYourTurn│
        └─────────────┘            └─────────────┘
 ```
 
-Each player ships a `Car` contract. The game contract calls `takeYourTurn` on each car in turn, passing the full visible state. The car decides whether to buy speed or shells, then returns.
+각 플레이어는 `Car` 컨트랙트를 배포한다. 게임 컨트랙트가 차례로 각 car 의 `takeYourTurn` 을 호출하며, 보이는 전체 상태를 인자로 넘긴다. car 는 가속을 살지 shell 을 살지 결정하고 리턴한다.
 
-## The dynamic pricing layer
+## 동적 가격 레이어
 
-Both `ACCELERATE` and `SHELL` are priced by a **continuous decay schedule** — price drops the longer nobody buys, jumps back up after each purchase. Concretely, the price function:
+`ACCELERATE` 와 `SHELL` 둘 다 **연속 감쇠 스케줄**로 가격이 매겨진다 — 아무도 안 사면 시간이 지날수록 가격이 떨어지고, 누가 사면 그만큼 가격이 다시 튀어오른다. 수식으로:
 
 ```
 price(turn, soldSoFar) = TARGET_PRICE *
-                        exp( -PER_TURN_DECREASE * turn )      // time-decay
-                      * exp(  SELL_PER_TURN     * soldSoFar ) // surge on buys
+                        exp( -PER_TURN_DECREASE * turn )      // 시간 감쇠
+                      * exp(  SELL_PER_TURN     * soldSoFar ) // 매수 시 가격 점프
 ```
 
-(Implemented in fixed-point with `wadExp` / `wadMul` from a signed wad-math helper.)
+(부호 있는 wad-math 헬퍼의 `wadExp` / `wadMul` 로 fixed-point 구현)
 
-**Why this matters for the bot:** the price you'll pay is a *deterministic function of public state*. You can compute, on-chain, exactly what each next action would cost — including how much the price would jump for the *opponent* if they bought right after you. That's the whole game.
+**봇에게 중요한 함의:** 내가 지불할 가격은 *공개 상태의 결정적 함수*다. 다음에 어떤 액션을 사든 비용을 온체인에서 정확히 계산할 수 있다 — 심지어 *상대*가 바로 다음에 같은 걸 사면 가격이 얼마나 점프할지까지. 게임 전체가 이 한 가지에 걸려 있다.
 
-## The bot's decision surface
+## 봇의 의사결정 표면
 
-Each turn the bot sees `(myBalance, mySpeed, myPosition)` × all three cars. It can choose:
+매 턴 봇은 `(myBalance, mySpeed, myPosition)` × 세 대 전부의 상태를 본다. 선택지는:
 
-1. Do nothing (free)
-2. Buy `k` units of acceleration → costs `getAccelerateCost(k)` from balance
-3. Buy `k` units of shell → costs `getShellCost(k)`, sets the car directly ahead to speed 1
+1. 아무것도 안 함 (무료)
+2. 가속 `k` 단위 매수 → balance 에서 `getAccelerateCost(k)` 차감
+3. shell `k` 단위 매수 → `getShellCost(k)` 차감, 바로 앞 car 의 speed 를 1로
 
-The decision is sequential and local — no off-chain compute, no persistent storage between turns. **Every turn is a pure function of the current state.**
+결정은 순차적이고 로컬하다 — 오프체인 연산 없음, 턴 간 영구 저장소 없음. **매 턴이 현재 상태의 순수 함수다.**
 
-### Sketch of a strong strategy (anonymized)
+### 강한 전략 스케치 (일반화된 표현)
 
 ```
 on takeYourTurn:
-  if I'm in lead by a comfortable margin:
-    buy minimum acceleration to maintain lead
-  else if a shell on the car ahead would close the gap and is cheap:
-    buy 1 shell
-  else if acceleration price is well below the time-averaged price:
-    buy acceleration aggressively
+  if 내가 안전한 차이로 선두라면:
+    lead 유지를 위한 최소 가속만 매수
+  else if 앞 차에 shell 한 발이 격차를 줄이고 가격도 싸다면:
+    shell 1발 매수
+  else if 가속 가격이 시간 평균 가격에 비해 충분히 낮다면:
+    공격적으로 가속 매수
   else:
-    do nothing (let the price decay one more turn)
+    아무것도 안 함 (가격이 한 턴 더 감쇠하도록 둠)
 ```
 
-The hard part is "comfortable margin" and "well below time-averaged price" — both depend on **how many turns are left** and **what the opponents are likely to do**.
+어려운 부분은 "안전한 차이"와 "충분히 낮은 가격"의 기준이다. 둘 다 **남은 턴 수**와 **상대가 무엇을 할지**에 의존한다.
 
-## Design choices worth flagging
+## 짚어둘 만한 설계 결정
 
-### 1. State is global, decisions are local
-The game contract holds canonical state; the bot is a stateless decision function. This means **the bot can never assume anything between turns** — opponents may have changed everything. Stateless design forces clean reasoning.
+### 1. 상태는 글로벌, 결정은 로컬
+게임 컨트랙트가 정본 상태를 들고 있고, 봇은 무상태 의사결정 함수다. 이는 **봇이 턴 간에 어떤 것도 가정하지 못한다**는 뜻이다 — 상대가 그 사이 모든 걸 바꿨을 수 있다. 무상태 설계가 깔끔한 추론을 강제한다.
 
-### 2. Fixed-point everywhere
-Prices use 18-decimal signed wad math via a helper library (`SignedWadMath`). Naive integer arithmetic would compound rounding errors across hundreds of turns.
+### 2. 모든 곳에서 fixed-point
+가격은 18자리 부호 있는 wad math 를 헬퍼 라이브러리(`SignedWadMath`)로 처리한다. 단순 정수 산술로 두면 수백 턴 누적 시 rounding 오차가 발산한다.
 
-### 3. The "shell" mechanic creates a non-linear payoff
-A single shell instantly drops the target's speed to 1, regardless of how many accelerations they bought. This is a *kill switch* — but it's expensive and gets more expensive as more shells get bought. The bot has to weigh: is the opponent's current speed advantage worth the shell price, or will they slow down anyway?
+### 3. "shell" 메커니즘은 비선형 보상을 만든다
+shell 한 발이면 상대가 가속을 얼마나 샀든 즉시 speed 가 1로 떨어진다. 일종의 *kill switch* — 하지만 비싸고, shell 매수가 늘수록 더 비싸진다. 봇은 매번 저울질해야 한다: 지금 상대의 speed 우위가 shell 가격 값을 하는가, 아니면 그냥 두면 어차피 자연히 느려질 것인가.
 
-### 4. Three players, not two
-With three cars, you can sometimes shell the leader and let the third car eat the cost of overtaking *you* — second-place is often better than first-place under threat. The bot needs to reason about *which* opponent to target, not just whether to attack.
+### 4. 2인이 아니라 3인
+3대 race 라서 가끔은 선두에 shell 을 박고 3등이 비싸게 *나*를 추월하도록 두는 게 낫다 — 위협 받는 상태에서는 2등이 1등보다 자주 더 안전하다. 봇은 "공격할지 말지"가 아니라 *어느 상대*를 칠지를 추론해야 한다.
